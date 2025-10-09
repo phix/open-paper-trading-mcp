@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/Open-Agent-Tools/open-paper-trading-mcp/discussions
+    about: Ask questions, share ideas, or discuss the project with the community
+  - name: 🔒 Security Vulnerability
+    url: https://github.com/Open-Agent-Tools/open-paper-trading-mcp/security/advisories/new
+    about: Report a security vulnerability privately (please do not open a public issue)
+  - name: 📚 Documentation
+    url: https://github.com/Open-Agent-Tools/open-paper-trading-mcp#readme
+    about: Read the documentation and usage guides
+  - name: 🐋 Docker Hub
+    url: https://hub.docker.com/r/openagenttools/open-paper-trading-mcp
+    about: View the Docker image

@@ -4,10 +4,34 @@ version = "0.1.0"
 description = "Open Paper Trading MCP - A dual-interface paper trading simulation platform"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 authors = [
     { name = "Wes Etheredge", email = "jwesleye@gmail.com" }
 ]
+keywords = ["trading", "paper-trading", "mcp", "simulation", "fastapi", "finance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: System :: Distributed Computing",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
+Repository = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
+"Bug Tracker" = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp/issues"
+Documentation = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp#readme"
 
 # Minimal dependencies for MCP server functionality
 dependencies = [
