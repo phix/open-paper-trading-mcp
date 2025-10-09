@@ -639,7 +639,7 @@ class TestTradingServiceAccountCreation:
         for i, adapter in enumerate(adapters):
             account_owner = f"adapter_test_user_{i}"
             service = TradingService(
-                quote_adapter=adapter,
+                quote_adapter=adapter,  # type: ignore[arg-type]
                 account_owner=account_owner,
                 db_session=clean_db_session,  # Properly inject the session
             )

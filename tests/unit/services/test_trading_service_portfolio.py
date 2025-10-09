@@ -253,7 +253,9 @@ class TestGetPortfolio:
         assert len(result.positions) == 1  # Position included with fallback price
         assert result.positions[0].current_price == 50.0  # Uses avg_price as fallback
         assert result.total_value == 55000.0  # Cash + position value
-        assert result.total_pnl == 0.0  # No unrealized gain/loss with avg_price fallback
+        assert (
+            result.total_pnl == 0.0
+        )  # No unrealized gain/loss with avg_price fallback
 
     @pytest.mark.asyncio
     async def test_get_portfolio_mixed_assets(self, db_session: AsyncSession):
@@ -664,7 +666,7 @@ class TestGetPositions:
         mock_quote_adapter.get_quote.side_effect = mock_get_quote
 
         mock_position_converter = AsyncMock()
-        
+
         def mock_to_schema(db_pos, current_price):
             return Position(
                 symbol=db_pos.symbol,
@@ -674,7 +676,7 @@ class TestGetPositions:
                 unrealized_pnl=(current_price - db_pos.avg_price) * db_pos.quantity,
                 realized_pnl=0.0,
             )
-        
+
         mock_position_converter.to_schema.side_effect = mock_to_schema
 
         service = TradingService(

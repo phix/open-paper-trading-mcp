@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -662,12 +662,12 @@ class TradingService:
                 async def get_cached_price_safe(symbol: str):
                     try:
                         # Try to get cached price from test_stock_quotes table
-                        from datetime import datetime, timedelta, timezone
+                        from datetime import datetime, timedelta
 
                         from sqlalchemy import text
 
                         # Check for recent cached quote (within last 24 hours)
-                        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+                        cutoff_time = datetime.now(UTC) - timedelta(hours=24)
 
                         # Use raw query since test_stock_quotes might not have ORM model
                         cached_stmt = text("""
@@ -745,7 +745,11 @@ class TradingService:
                             from app.schemas.positions import Position
 
                             # Truncate symbol if too long for validation
-                            symbol = db_pos.symbol[:20] if len(db_pos.symbol) > 20 else db_pos.symbol
+                            symbol = (
+                                db_pos.symbol[:20]
+                                if len(db_pos.symbol) > 20
+                                else db_pos.symbol
+                            )
 
                             basic_position = Position(
                                 symbol=symbol,

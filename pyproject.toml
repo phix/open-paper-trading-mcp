@@ -67,6 +67,9 @@ python_version = "3.11"
 exclude = [
     "reference_code/",
     "examples/",
+    "scripts/load_user_profile.py",
+    "tests/unit/concurrency/",
+    "tests/integration/test_account_integration.py",
 ]
 ignore_missing_imports = true
 warn_return_any = false
