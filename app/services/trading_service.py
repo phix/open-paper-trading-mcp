@@ -131,9 +131,18 @@ class TradingService:
         from sqlalchemy import select
 
         async def _operation(db: AsyncSession):
-            stmt = select(DBAccount).where(DBAccount.owner == self.account_owner)
+            # Resolve the owner's account defensively: take the oldest if more than
+            # one ever exists. `scalar_one_or_none()` raises on duplicates, and
+            # `owner` is a non-unique legacy column, so this is the get side of an
+            # idempotent get-or-create. (Single-user personal tool: concurrent
+            # same-owner creation isn't a real scenario, so no DB lock is warranted.)
+            stmt = (
+                select(DBAccount)
+                .where(DBAccount.owner == self.account_owner)
+                .order_by(DBAccount.created_at)
+            )
             result = await db.execute(stmt)
-            account = result.scalar_one_or_none()
+            account = result.scalars().first()
 
             if not account:
                 account = DBAccount(
@@ -187,10 +196,16 @@ class TradingService:
                 if not account:
                     raise NotFoundError(f"Account with ID {account_id} not found")
             else:
-                # Get account by owner (legacy behavior)
-                stmt = select(DBAccount).where(DBAccount.owner == self.account_owner)
+                # Get account by owner (legacy behavior). Defensive .first() with a
+                # stable order so a stray duplicate never raises (see
+                # _ensure_account_exists).
+                stmt = (
+                    select(DBAccount)
+                    .where(DBAccount.owner == self.account_owner)
+                    .order_by(DBAccount.created_at)
+                )
                 result = await db.execute(stmt)
-                account = result.scalar_one_or_none()
+                account = result.scalars().first()
                 if not account:
                     raise NotFoundError(
                         f"Account for owner {self.account_owner} not found"
@@ -723,7 +738,7 @@ class TradingService:
                 # Process positions with fetched quotes
                 for db_pos in db_positions:
                     # Use pre-fetched quote data
-                    quote = quotes.get(db_pos.symbol, None)
+                    quote = quotes.get(db_pos.symbol)
                     try:
                         if quote and hasattr(quote, "price"):
                             current_price = quote.price
