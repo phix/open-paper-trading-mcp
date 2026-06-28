@@ -27,6 +27,23 @@ The application runs as a multi-service Docker setup with the following componen
   - Test data adapter enabled by default
   - Robinhood credentials can be overridden via environment variables
 
+## Superset env: OpenBB dependency (image-size impact)
+
+The Hub's `uv` environment is the **superset env** for cross-fork integration: the
+`openbb` package is a direct dependency so the OpenBB quote adapter (ADR 0002) can do
+`from openbb import obb` in-process. This materially grows the build:
+
+- The synced `.venv` is roughly **~430 MB** (OpenBB pulls in `openbb-core` plus the
+  default provider/extension set — equity, economy, news, `yfinance`, etc., and
+  transitive scientific deps like `pandas`). The OpenBB packages account for the bulk
+  of the increase over the pre-OpenBB env.
+- First import is slower: OpenBB performs a **one-time static build** of the `obb`
+  accessor (assembling installed extensions) on first `import openbb`. Bake this into
+  the image (run an `import openbb` step during build) so containers don't pay it at
+  startup.
+- The per-fork standalone OpenBB env (poetry installer) is unchanged and remains the
+  source of truth for OpenBB-standalone work; this dependency only affects the Hub image.
+
 ## Quick Start
 
 To start all services:

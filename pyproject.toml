@@ -27,12 +27,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[project.urls]
-Homepage = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
-Repository = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
-"Bug Tracker" = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp/issues"
-Documentation = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp#readme"
-
 # Minimal dependencies for MCP server functionality
 dependencies = [
     # Core FastAPI and server dependencies
@@ -66,7 +60,17 @@ dependencies = [
     "fastmcp==2.7.0",
     "psycopg2-binary>=2.9.10",
     "email-validator>=2.2.0",
+    # OpenBB superset env: makes `from openbb import obb` resolvable in the Hub's
+    # uv environment so the OpenBB quote adapter (ADR 0002, phix/stockade#7) can
+    # call into OpenBB in-process. yfinance is the zero-key default provider.
+    "openbb>=4.4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
+Repository = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp"
+"Bug Tracker" = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp/issues"
+Documentation = "https://github.com/Open-Agent-Tools/open-paper-trading-mcp#readme"
 
 [project.optional-dependencies]
 dev = [
