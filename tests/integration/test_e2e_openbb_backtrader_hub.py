@@ -79,12 +79,13 @@ from app.models.assets import Stock
 
 pytestmark = [pytest.mark.integration, pytest.mark.journey_integration]
 
-# The Hub's order router is mounted under this prefix; the submitter appends its
-# own ``/orders`` path, so this is the base it should target. (In real use that
-# means HUB_API_URL must include the prefix, e.g.
-# ``http://localhost:2080/api/v1/trading`` — see the PR's integration note.)
-HUB_BASE = "/api/v1/trading"
-ORDERS_URL = f"{HUB_BASE}/orders"
+# The submitter targets the Hub's full order path (``/api/v1/trading/orders``)
+# itself, so callers pass the Hub's BASE host — in real use ``HUB_API_URL`` is the
+# host root (e.g. ``http://localhost:2080``), not the router prefix. Under
+# ``TestClient`` the base is empty (paths are relative). ``ORDERS_URL`` is the
+# absolute route used for the GET assertions below.
+HUB_BASE = ""
+ORDERS_URL = "/api/v1/trading/orders"
 
 # The symbol exercised through the whole loop. "AAPL" is also resolvable by the
 # Hub's synthetic ``test`` quote adapter, which create_order uses to validate the
@@ -260,7 +261,7 @@ def _ensure_tables() -> None:
 # The end-to-end test
 # --------------------------------------------------------------------------- #
 @requires_backtrader
-def test_openbb_quote_to_backtrader_signal_to_hub_paper_order(tmp_path) -> None:
+def test_openbb_quote_to_backtrader_signal_to_hub_paper_order(tmp_path, monkeypatch) -> None:
     """OpenBB quote -> backtrader OrderIntent -> Hub paper order, end to end."""
     # ---- Step 1: OpenBB quote (obb MOCKED) -------------------------------- #
     adapter = _mocked_openbb_adapter(QUOTE_PRICE)
@@ -297,7 +298,10 @@ def test_openbb_quote_to_backtrader_signal_to_hub_paper_order(tmp_path) -> None:
     from app.core.service_factory import get_trading_service
 
     with TestClient(app) as client:
-        get_trading_service().quote_adapter = adapter
+        # monkeypatch so the global TradingService's quote adapter is restored at
+        # teardown — otherwise this leaks the OpenBB adapter onto the singleton and
+        # breaks later tests that rely on the default synthetic adapter.
+        monkeypatch.setattr(get_trading_service(), "quote_adapter", adapter)
 
         orders_before = client.get(ORDERS_URL).json()["count"]
 

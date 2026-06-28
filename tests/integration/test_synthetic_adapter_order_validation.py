@@ -20,7 +20,6 @@ stays opt-in alongside the other DB-backed integration tests.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import date
 
 import pytest
@@ -46,42 +45,43 @@ SCENARIO = "default"
 def _seed_synthetic_quote() -> None:
     """Ensure tables exist and a synthetic AAPL quote row is present.
 
-    Uses the thread-local async engine the conftest points at
-    ``TEST_DATABASE_URL``; idempotent so it is safe to re-run.
+    Seeds via the **synchronous** engine/session (psycopg2) on purpose: it has no
+    event-loop coupling, so this stays order-independent in the full suite (the
+    shared async engine's asyncpg pool otherwise binds connections to whichever
+    event loop touched it first, breaking ``asyncio.run`` reuse across tests). It
+    also dogfoods the exact sync path #13 repaired. Idempotent.
     """
     from app.models.database import trading  # noqa: F401  (register metadata)
     from app.models.database.base import Base
-    from app.storage.database import get_async_engine, get_async_session
+    from app.storage.database import get_sync_session, sync_engine
 
-    async def _setup() -> None:
-        engine = get_async_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    Base.metadata.create_all(sync_engine)
 
-        async for db in get_async_session():
-            existing = await db.execute(
+    with get_sync_session() as db:
+        existing = (
+            db.execute(
                 select(DevStockQuote).where(
                     DevStockQuote.symbol == SYMBOL,
                     DevStockQuote.quote_date == QUOTE_DATE,
                     DevStockQuote.scenario == SCENARIO,
                 )
             )
-            if existing.scalars().first() is None:
-                db.add(
-                    DevStockQuote(
-                        symbol=SYMBOL,
-                        quote_date=QUOTE_DATE,
-                        bid=145.00,
-                        ask=145.20,
-                        price=145.10,
-                        volume=1_000_000,
-                        scenario=SCENARIO,
-                    )
+            .scalars()
+            .first()
+        )
+        if existing is None:
+            db.add(
+                DevStockQuote(
+                    symbol=SYMBOL,
+                    quote_date=QUOTE_DATE,
+                    bid=145.00,
+                    ask=145.20,
+                    price=145.10,
+                    volume=1_000_000,
+                    scenario=SCENARIO,
                 )
-                await db.commit()
-            break
-
-    asyncio.run(_setup())
+            )
+            db.commit()
 
 
 def test_create_order_with_synthetic_test_adapter() -> None:
