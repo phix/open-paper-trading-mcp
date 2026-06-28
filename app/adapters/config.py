@@ -27,6 +27,7 @@ class AdapterFactoryConfig:
             "test_data": "app.adapters.synthetic_data.DevDataQuoteAdapter",
             "test_data_db": "app.adapters.synthetic_data_db.TestDataDBQuoteAdapter",
             "robinhood": "app.adapters.robinhood.RobinhoodAdapter",
+            "openbb": "app.adapters.openbb.OpenBBQuoteAdapter",
             "polygon": "app.adapters.polygon.PolygonQuoteAdapter",  # Future
             "yahoo": "app.adapters.yahoo.YahooQuoteAdapter",  # Future
             "alpha_vantage": "app.adapters.alpha_vantage.AlphaVantageQuoteAdapter",  # Future
@@ -62,6 +63,19 @@ class AdapterFactoryConfig:
                     "username": "${ROBINHOOD_USERNAME}",
                     "password": "${ROBINHOOD_PASSWORD}",
                     "token_path": "${ROBINHOOD_TOKEN_PATH}",
+                },
+            },
+            "openbb": {
+                # Selected explicitly via QUOTE_ADAPTER_TYPE=openbb; kept out of the
+                # auto-registered default set so startup/cache-warming makes no
+                # network calls unless the operator opts in.
+                "enabled": False,
+                "priority": 20,
+                "timeout": 30.0,
+                "cache_ttl": 300.0,  # 5 minutes; blunt provider rate limits via cache
+                "config": {
+                    # Zero-key default provider; override with any OpenBB provider.
+                    "provider": "${OPENBB_PROVIDER}",
                 },
             },
             "polygon": {
