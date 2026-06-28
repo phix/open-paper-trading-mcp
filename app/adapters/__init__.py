@@ -26,6 +26,7 @@ from .config import (
     create_test_adapter,
     get_adapter_factory,
 )
+from .openbb import OpenBBConfig, OpenBBQuoteAdapter
 from .synthetic_data import DevDataQuoteAdapter, TestDataError, get_test_adapter
 
 __all__ = [
@@ -38,6 +39,9 @@ __all__ = [
     "CachedQuoteAdapter",
     # Test data
     "DevDataQuoteAdapter",
+    # OpenBB market data
+    "OpenBBConfig",
+    "OpenBBQuoteAdapter",
     # Base classes
     "QuoteAdapter",
     # Caching
