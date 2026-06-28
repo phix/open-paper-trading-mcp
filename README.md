@@ -136,14 +136,61 @@ cp .env.example .env
 uv run python app/main.py
 ```
 
-### Configuration
+### Configuration & secrets
 
-The application is configured using environment variables. Copy the `.env.example` file to `.env` and update the following variables:
+The application is configured entirely through environment variables. Bootstrap
+your local config from the fully-commented template:
 
--   `DATABASE_URL`: The connection string for your PostgreSQL database.
--   `ROBINHOOD_USERNAME`: Your Robinhood username (for live market data).
--   `ROBINHOOD_PASSWORD`: Your Robinhood password.
--   `QUOTE_ADAPTER_TYPE`: The quote adapter to use (`test` or `robinhood`).
+```bash
+cp .env.example .env
+```
+
+`.env` is **gitignored** — keep real secrets there and **never commit them**.
+The hub runs out-of-the-box with **zero keys**: the default
+`QUOTE_ADAPTER_TYPE=test` serves synthetic market data, so a fresh clone only
+needs a reachable `DATABASE_URL` to start. `.env.example` documents every
+variable; the groups below summarize what is required vs. optional.
+
+**Required**
+
+-   `DATABASE_URL`: async PostgreSQL DSN (`postgresql+asyncpg://…`). In Docker the
+    host is `db`; for a local Postgres use `localhost`.
+
+**Server / ports (optional, defaults shown)**
+
+-   `FASTAPI_PORT` (`2080`): REST API + React frontend.
+-   `MCP_SERVER_PORT` / `MCP_HTTP_PORT` (`2081`): MCP tool server.
+-   `MCP_SERVER_HOST` (`localhost`; `0.0.0.0` in Docker), `MCP_HTTP_URL`.
+-   `BACKEND_CORS_ORIGINS`, `LOG_LEVEL`, `ENVIRONMENT`, `DEBUG`, `SECRET_KEY`
+    (change `SECRET_KEY` for any shared/prod deployment).
+
+**Quote adapter — market-data source (optional; default `test`)**
+
+-   `QUOTE_ADAPTER_TYPE`:
+    -   `test` — synthetic data, **no keys required** (default; recommended start).
+    -   `robinhood` — live **read-only** Robinhood data; needs `ROBINHOOD_USERNAME`
+        and `ROBINHOOD_PASSWORD`.
+    -   `openbb` — OpenBB Platform data ([ADR 0002]). Falls back to the free
+        `yfinance` provider with **no key**; add `OPENBB_*_API_KEY` only for a
+        premium provider (FMP, Polygon, Intrinio).
+-   `TEST_SCENARIO` / `TEST_DATE`: synthetic-data tuning (used only by `test`).
+
+**Secrets (optional — only for the provider you enable)**
+
+-   `ROBINHOOD_USERNAME` / `ROBINHOOD_PASSWORD`: read-only market data only
+    (paper-only — never live order routing). Leave blank for the `test` adapter.
+-   `OPENBB_*_API_KEY`: passed to OpenBB at startup; never committed.
+
+**LLM / agent provider (optional; seam per [ADR 0004], not yet wired in code)**
+
+-   `LLM_PROVIDER` (`local` | `gemini`), `LLM_BASE_URL`, `LLM_API_KEY`,
+    `LLM_MODEL`: drive the local-LLM (LM Studio, OpenAI-compatible) provider.
+    `LLM_API_KEY=lm-studio` is a non-secret placeholder.
+-   `GOOGLE_API_KEY` / `GOOGLE_MODEL`: the Gemini path, used when
+    `LLM_PROVIDER=gemini` and by the ADK example/evals.
+
+[ADR 0002]: https://github.com/phix/stockade/blob/main/docs/adr/0002-openbb-quote-adapter.md
+[ADR 0004]: https://github.com/phix/stockade/blob/main/docs/adr/0004-local-llm-repoint.md
 
 ### Development Commands
 
