@@ -65,7 +65,11 @@ class Settings(BaseSettings):
     # Default stays `gemini` so existing behavior is unchanged until the local
     # swap is verified. The LLM_* vars below drive the `local` provider.
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")  # local | gemini
-    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://tinman:1234/v1")
+    # Use the Tailscale MagicDNS name (not bare "tinman", which also resolves to
+    # dead public IPv6 addresses). Verified reachable; LM Studio serving qwen2.5.
+    LLM_BASE_URL: str = os.getenv(
+        "LLM_BASE_URL", "http://tinman.tailc095b7.ts.net:1234/v1"
+    )
     # Non-secret placeholder; LM Studio ignores the key but the client requires one.
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "lm-studio")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen2.5-coder-7b-instruct")
