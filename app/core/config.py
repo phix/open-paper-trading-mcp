@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     ROBINHOOD_PASSWORD: str = os.getenv("ROBINHOOD_PASSWORD", "")
     ROBINHOOD_TOKEN_PATH: str = os.getenv("ROBINHOOD_TOKEN_PATH", "/app/.tokens")
 
+    # LLM provider seam (ADR 0004 / phix/stockade#6)
+    # Selects the agent's inference backend behind a swappable seam:
+    #   gemini -> existing Google Gemini/ADK path (GOOGLE_MODEL / GOOGLE_API_KEY)
+    #   local  -> self-hosted LLM (tinman, LM Studio, OpenAI-compatible)
+    # Default stays `gemini` so existing behavior is unchanged until the local
+    # swap is verified. The LLM_* vars below drive the `local` provider.
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")  # local | gemini
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://tinman:1234/v1")
+    # Non-secret placeholder; LM Studio ignores the key but the client requires one.
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "lm-studio")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen2.5-coder-7b-instruct")
+
     def get_cors_origins(self) -> list[str]:
         """Convert CORS origins string to list."""
         if isinstance(self.BACKEND_CORS_ORIGINS, str):

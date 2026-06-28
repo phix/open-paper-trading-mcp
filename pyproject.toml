@@ -64,6 +64,7 @@ dependencies = [
     # uv environment so the OpenBB quote adapter (ADR 0002, phix/stockade#7) can
     # call into OpenBB in-process. yfinance is the zero-key default provider.
     "openbb>=4.4.0",
+    "openai>=2.44.0",
 ]
 
 [project.urls]
