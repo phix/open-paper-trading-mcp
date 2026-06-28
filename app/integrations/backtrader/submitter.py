@@ -30,7 +30,9 @@ from typing import Any, Protocol
 from app.integrations.backtrader.order_intent import OrderIntent
 
 DEFAULT_HUB_URL = "http://localhost:2080"
-ORDERS_PATH = "/orders"
+# The Hub mounts the trading router at this prefix (app/api/v1/trading.py), so the
+# paper-order create endpoint is /api/v1/trading/orders — not a bare /orders.
+ORDERS_PATH = "/api/v1/trading/orders"
 
 
 def _hub_url() -> str:
