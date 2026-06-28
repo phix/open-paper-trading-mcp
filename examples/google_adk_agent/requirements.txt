@@ -3,6 +3,10 @@ google-adk
 google-generativeai
 python-dotenv
 
+# Local-LLM provider (ADR 0004): ADK's LiteLlm wraps LiteLLM to reach the
+# OpenAI-compatible LM Studio endpoint on `tinman` when LLM_PROVIDER=local.
+litellm
+
 # MCP and FastAPI dependencies (should already be installed in main project)
 mcp
 fastapi

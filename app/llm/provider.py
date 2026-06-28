@@ -66,6 +66,32 @@ class ResolvedProvider:
     client: Any | None
 
 
+@dataclass(frozen=True)
+class AgentModelSpec:
+    """Provider-agnostic description of the model an agent runtime should build.
+
+    The agent layer (ADK, in ``examples/``) turns this into its own model object:
+    Gemini from ``gemini_model`` (a model-name string ADK builds itself), or an
+    OpenAI-compatible model from ``litellm_kwargs`` (e.g. ADK's ``LiteLlm``).
+
+    Kept free of any ADK import so it stays unit-testable in the Hub env, where
+    ``google.adk`` is not installed (it lives only in the agent's own
+    ``requirements.txt``). The agent module does the trivial
+    ``LiteLlm(**spec.litellm_kwargs)`` construction itself.
+
+    Attributes:
+        provider: Which backend was selected.
+        gemini_model: Model-name string for the Gemini/ADK path; ``None`` for
+            ``local``.
+        litellm_kwargs: Kwargs for ADK's ``LiteLlm`` (``model``/``api_base``/
+            ``api_key``) for the ``local`` path; ``None`` for ``gemini``.
+    """
+
+    provider: LLMProvider
+    gemini_model: str | None
+    litellm_kwargs: dict[str, Any] | None
+
+
 def _resolve_provider_name(raw: str) -> LLMProvider:
     """Parse ``LLM_PROVIDER`` case-insensitively into a known provider."""
     try:
@@ -123,4 +149,43 @@ def get_llm_provider(config: Settings | None = None) -> ResolvedProvider:
         model=os.getenv("GOOGLE_MODEL") or DEFAULT_GEMINI_MODEL,
         base_url=None,
         client=None,
+    )
+
+
+def get_agent_model_spec(config: Settings | None = None) -> AgentModelSpec:
+    """Resolve the LLM provider into an ADK-consumable model spec.
+
+    This is the seam's bridge to the agent layer: it reuses ``get_llm_provider``
+    for selection, then describes the model the ADK agent should build — without
+    importing ADK, so it stays unit-testable in the Hub env. For ``local`` it
+    emits ``LiteLlm`` kwargs using LiteLLM's ``openai/<model>`` custom-endpoint
+    convention (LM Studio is OpenAI-compatible); for ``gemini`` it emits the
+    model-name string ADK builds its own Gemini model from.
+
+    Args:
+        config: Settings to read from; defaults to the process-wide ``settings``
+            singleton. Injectable for tests.
+
+    Returns:
+        An ``AgentModelSpec`` with exactly one of ``gemini_model`` /
+        ``litellm_kwargs`` populated, per the selected provider.
+    """
+    config = config or settings
+    resolved = get_llm_provider(config)
+
+    if resolved.provider is LLMProvider.LOCAL:
+        return AgentModelSpec(
+            provider=resolved.provider,
+            gemini_model=None,
+            litellm_kwargs={
+                "model": f"openai/{resolved.model}",
+                "api_base": resolved.base_url,
+                "api_key": config.LLM_API_KEY,
+            },
+        )
+
+    return AgentModelSpec(
+        provider=resolved.provider,
+        gemini_model=resolved.model,
+        litellm_kwargs=None,
     )

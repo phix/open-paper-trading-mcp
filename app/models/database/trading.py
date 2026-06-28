@@ -152,6 +152,14 @@ class Order(Base):
     )
     net_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Idempotency key (ADR 0003): stable client-supplied id. When present, a
+    # repeat create returns the existing order instead of a duplicate paper
+    # trade. Nullable so normal REST/MCP orders are unaffected; indexed for the
+    # per-account dedupe lookup.
+    client_intent_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+
     # Relationships
     account: Mapped["Account"] = relationship("Account", back_populates="orders")
 

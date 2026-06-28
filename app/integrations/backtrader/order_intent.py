@@ -12,13 +12,14 @@ Field mapping (OrderIntent -> OrderCreate)::
     quantity          -> quantity          (int, > 0)
     order_type        -> condition         ("market"|"limit" -> OrderCondition)
     limit_price       -> price             (float | None; None for market)
-    client_intent_id  -> (no OrderCreate field; idempotency is submitter-side)
+    client_intent_id  -> client_intent_id  (idempotency key, honored by the Hub)
     strategy          -> (no OrderCreate field; provenance only)
 
-Note the two intentional mismatches: the Hub's ``OrderCreate`` has **no**
-``client_intent_id`` or ``strategy`` field today, so idempotency is enforced by
-the submitter's local dedupe ledger (ADR 0003 idempotency option 2) and the
-originating strategy name is carried only for provenance/export.
+The Hub's ``OrderCreate`` now carries ``client_intent_id`` (ADR 0003 idempotency
+option 1): a repeated key returns the existing order instead of a duplicate paper
+trade. The submitter's local dedupe ledger remains as a belt-and-suspenders
+backstop. The originating ``strategy`` name has no Hub field and is carried only
+for provenance/export.
 
 Scope: equities, single-leg only. Options/multi-leg intents are out of scope.
 """
@@ -121,9 +122,10 @@ class OrderIntent:
     def to_order_create_payload(self) -> dict[str, Any]:
         """Map this intent to the JSON body for the Hub's ``POST /orders``.
 
-        Returns exactly the fields the Hub's ``OrderCreate`` accepts. The
-        idempotency key and strategy name are deliberately omitted (no
-        corresponding Hub fields); idempotency lives in the submitter ledger.
+        Returns exactly the fields the Hub's ``OrderCreate`` accepts, including
+        ``client_intent_id`` so the Hub can dedupe a repeated submit (ADR 0003
+        idempotency option 1). ``strategy`` is omitted (no corresponding Hub
+        field; provenance only).
         """
         return {
             "symbol": self.symbol,
@@ -131,6 +133,7 @@ class OrderIntent:
             "quantity": self.quantity,
             "price": self.limit_price,
             "condition": _ORDER_TYPE_TO_CONDITION[self.order_type],
+            "client_intent_id": self.client_intent_id,
         }
 
     def to_dict(self) -> dict[str, Any]:

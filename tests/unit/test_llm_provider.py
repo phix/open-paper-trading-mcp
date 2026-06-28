@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.llm.provider import (
     DEFAULT_GEMINI_MODEL,
     LLMProvider,
+    get_agent_model_spec,
     get_llm_provider,
 )
 
@@ -87,3 +88,33 @@ def test_default_provider_is_gemini() -> None:
 def test_unknown_provider_raises() -> None:
     with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
         get_llm_provider(_settings(LLM_PROVIDER="bedrock"))
+
+
+# --- Agent model spec: the ADK-free bridge consumed by the ADK agent (ADR 0004)
+
+
+def test_agent_model_spec_local_emits_litellm_kwargs() -> None:
+    spec = get_agent_model_spec(_settings(LLM_PROVIDER="local"))
+
+    assert spec.provider is LLMProvider.LOCAL
+    assert spec.gemini_model is None
+    # LiteLLM's `openai/<model>` convention points at the OpenAI-compatible
+    # LM Studio endpoint; the agent builds LiteLlm(**litellm_kwargs) itself.
+    assert spec.litellm_kwargs == {
+        "model": "openai/qwen2.5-coder-7b-instruct",
+        "api_base": TINMAN_BASE_URL,
+        "api_key": "lm-studio",
+    }
+
+
+def test_agent_model_spec_gemini_emits_model_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_MODEL", "gemini-1.5-flash")
+
+    spec = get_agent_model_spec(_settings(LLM_PROVIDER="gemini"))
+
+    assert spec.provider is LLMProvider.GEMINI
+    # Gemini path: ADK builds its own model from the name string; no LiteLlm.
+    assert spec.litellm_kwargs is None
+    assert spec.gemini_model == "gemini-1.5-flash"

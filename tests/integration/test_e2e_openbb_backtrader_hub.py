@@ -279,13 +279,15 @@ def test_openbb_quote_to_backtrader_signal_to_hub_paper_order(tmp_path, monkeypa
     assert intent.quantity == QUANTITY
     assert intent.order_type == "market"
     assert intent.limit_price is None
-    # The intent maps 1:1 onto the Hub's OrderCreate body (ADR 0003).
+    # The intent maps 1:1 onto the Hub's OrderCreate body (ADR 0003), now
+    # including the client_intent_id the Hub honors for idempotency.
     assert intent.to_order_create_payload() == {
         "symbol": SYMBOL,
         "order_type": "buy",
         "quantity": QUANTITY,
         "price": None,
         "condition": "market",
+        "client_intent_id": intent.client_intent_id,
     }
 
     # ---- Step 3: submit to the real Hub paper-order endpoint (LIVE) ------- #

@@ -18,6 +18,8 @@ from google.adk.tools.mcp_tool.mcp_toolset import (
     StreamableHTTPConnectionParams,
 )
 
+from app.llm.provider import LLMProvider, get_agent_model_spec
+
 from .prompts import agent_instruction
 
 # Initialize environment and logging
@@ -27,6 +29,25 @@ dotenv_path = os.path.join(project_root, ".env")
 load_dotenv(dotenv_path)
 logging.basicConfig(level=logging.ERROR)
 warnings.filterwarnings("ignore")
+
+
+def _build_model() -> object:
+    """Resolve the agent's model from the Hub's LLM provider seam (ADR 0004).
+
+    Selection is configuration, not code: ``LLM_PROVIDER`` picks the backend.
+    ``local`` routes the agent at the self-hosted LM Studio endpoint on ``tinman``
+    via ADK's ``LiteLlm`` (LM Studio is OpenAI-compatible); ``gemini`` returns the
+    model-name string ADK builds its own Gemini model from. Either way the tools,
+    instruction, and MCP transport below are identical.
+
+    ``LiteLlm`` is imported lazily so the Gemini path needs no ``litellm`` install.
+    """
+    spec = get_agent_model_spec()
+    if spec.provider is LLMProvider.LOCAL:
+        from google.adk.models.lite_llm import LiteLlm
+
+        return LiteLlm(**spec.litellm_kwargs)
+    return spec.gemini_model
 
 
 def create_agent() -> Agent:
@@ -48,7 +69,7 @@ def create_agent() -> Agent:
     ]
 
     return Agent(
-        model=os.environ.get("GOOGLE_MODEL") or "gemini-2.0-flash",
+        model=_build_model(),
         name="Paper_Trading_Agent",
         instruction=agent_instruction,
         description="Specialized paper trading agent that can perform simulated trading operations through MCP tools.",
