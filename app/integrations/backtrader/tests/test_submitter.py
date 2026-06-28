@@ -61,7 +61,7 @@ def test_submits_each_intent_once(tmp_path):
     assert len(client.calls) == 2
     # Posts to the Hub's real order path with the mapped OrderCreate body.
     url, payload = client.calls[0]
-    assert url == "http://hub:2080/orders"
+    assert url == "http://hub:2080/api/v1/trading/orders"
     assert payload == {
         "symbol": "AAPL",
         "order_type": "buy",
