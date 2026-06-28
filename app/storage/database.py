@@ -18,8 +18,17 @@ if os.getenv("TESTING", "False").lower() == "true":
     if test_db_url:
         database_url = test_db_url
 
-# Sync engine (for legacy compatibility)
-SYNC_DATABASE_URL = database_url
+# Sync engine (for legacy compatibility).
+#
+# A synchronous SQLAlchemy engine/session must be bound to a *synchronous*
+# DBAPI driver. `database_url` is the async-driver URL (`postgresql+asyncpg://`)
+# used by the async engine below. Binding the sync engine to asyncpg makes every
+# synchronous ORM call (e.g. the DB-backed synthetic `test` quote adapter used
+# during order symbol-validation) raise
+# "greenlet_spawn has not been called; can't call await_only() here".
+# Strip the async driver so the sync engine uses psycopg2 (the default
+# `postgresql://` driver). See phix/stockade#13.
+SYNC_DATABASE_URL = database_url.replace("postgresql+asyncpg://", "postgresql://")
 sync_engine = create_engine(
     SYNC_DATABASE_URL,
     pool_size=5,  # Maximum number of permanent connections
@@ -72,8 +81,15 @@ def get_async_session_factory():
 async_engine = None
 AsyncSessionLocal = None
 
-# Create sync session factory (this is safe at module level)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+# Create sync session factory (this is safe at module level).
+# expire_on_commit=False (matching the async session factory) so ORM instances
+# read inside a `with get_sync_session()` block remain readable after the block
+# commits and closes the session. Without this, callers that return an ORM row
+# from the session scope (e.g. the synthetic `test` quote adapter) hit
+# DetachedInstanceError when reading attributes. See phix/stockade#13.
+SessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=sync_engine, expire_on_commit=False
+)
 
 # Export both sync and async engines and sessions
 __all__ = [
