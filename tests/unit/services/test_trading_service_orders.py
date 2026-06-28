@@ -103,6 +103,58 @@ class TestCreateOrder:
         assert db_order.account_id == account.id
 
     @pytest.mark.asyncio
+    async def test_create_order_idempotent_by_client_intent_id(
+        self, db_session: AsyncSession
+    ):
+        """A repeated client_intent_id returns the existing order, not a dup.
+
+        ADR 0003 idempotency option 1: the Hub honors the key so re-running a
+        backtrader export (or retrying a failed submit) never creates a second
+        paper trade.
+        """
+        account = DBAccount(
+            id="TEST123456",
+            owner="test_user",
+            cash_balance=50000.0,
+        )
+        db_session.add(account)
+        await db_session.commit()
+
+        mock_quote_adapter = AsyncMock()
+        mock_quote_adapter.get_quote.return_value = MagicMock(
+            price=150.0, quote_date=datetime.now()
+        )
+
+        service = TradingService(
+            quote_adapter=mock_quote_adapter,
+            account_owner="test_user",
+            db_session=db_session,
+        )
+
+        order_data = OrderCreate(
+            symbol="AAPL",
+            order_type=OrderType.BUY,
+            quantity=100,
+            price=None,
+            condition=OrderCondition.MARKET,
+            client_intent_id="strat:AAPL:deadbeef",
+        )
+
+        first = await service.create_order(order_data)
+        second = await service.create_order(order_data)
+
+        # Same order is returned both times.
+        assert second.id == first.id
+
+        # Exactly one row persisted for this key on this account.
+        stmt = select(DBOrder).where(
+            DBOrder.account_id == account.id,
+            DBOrder.client_intent_id == "strat:AAPL:deadbeef",
+        )
+        rows = (await db_session.execute(stmt)).scalars().all()
+        assert len(rows) == 1
+
+    @pytest.mark.asyncio
     async def test_create_order_limit_buy(self, db_session: AsyncSession):
         """Test creating a limit buy order."""
         # Create test account

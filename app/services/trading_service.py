@@ -468,12 +468,33 @@ class TradingService:
             raise NotFoundError(f"Symbol {symbol} not found: {e!s}") from e
 
     async def create_order(self, order_data: OrderCreate) -> Order:
-        """Create a new trading order."""
+        """Create a new trading order.
+
+        Idempotency (ADR 0003): when ``order_data.client_intent_id`` is set and
+        an order with that key already exists for this account, the existing
+        order is returned unchanged instead of creating a duplicate paper trade.
+        """
+        from sqlalchemy import select
+
         # Validate symbol exists
         await self.get_quote(order_data.symbol)
 
         async def _operation(db: AsyncSession):
             account = await self._get_account()
+
+            # Idempotency short-circuit: a repeated client_intent_id returns the
+            # already-accepted order rather than placing another paper trade.
+            if order_data.client_intent_id is not None:
+                existing = (
+                    await db.execute(
+                        select(DBOrder).where(
+                            DBOrder.account_id == account.id,
+                            DBOrder.client_intent_id == order_data.client_intent_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    return await self.order_converter.to_schema(existing)
 
             # Create database order
             db_order = DBOrder(
@@ -486,6 +507,7 @@ class TradingService:
                 stop_price=order_data.stop_price,
                 trail_percent=order_data.trail_percent,
                 trail_amount=order_data.trail_amount,
+                client_intent_id=order_data.client_intent_id,
                 status=OrderStatus.PENDING,
                 created_at=datetime.now(),
             )

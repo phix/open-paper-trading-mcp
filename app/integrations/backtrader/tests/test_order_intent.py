@@ -45,6 +45,7 @@ def test_market_intent_maps_to_ordercreate_payload():
         "quantity": 10,
         "price": None,
         "condition": "market",
+        "client_intent_id": "cid-1",
     }
 
 
@@ -56,6 +57,7 @@ def test_limit_intent_maps_to_ordercreate_payload():
         "quantity": 5,
         "price": 321.50,
         "condition": "limit",
+        "client_intent_id": "cid-2",
     }
 
 
@@ -76,12 +78,14 @@ def test_payload_validates_as_real_hub_ordercreate_limit():
     assert model.price == pytest.approx(321.50)
 
 
-def test_client_intent_id_and_strategy_are_not_ordercreate_fields():
-    """Documented mismatch: OrderCreate has no idempotency/strategy field."""
+def test_client_intent_id_crosses_seam_but_strategy_does_not():
+    """The Hub honors client_intent_id (ADR 0003 option 1); strategy is omitted."""
     payload = _market_buy().to_order_create_payload()
-    assert "client_intent_id" not in payload
+    # Idempotency key now crosses the seam and is a real OrderCreate field.
+    assert payload["client_intent_id"] == "cid-1"
+    assert "client_intent_id" in OrderCreate.model_fields
+    # strategy stays provenance-only: no Hub field, not in the payload.
     assert "strategy" not in payload
-    assert "client_intent_id" not in OrderCreate.model_fields
     assert "strategy" not in OrderCreate.model_fields
 
 

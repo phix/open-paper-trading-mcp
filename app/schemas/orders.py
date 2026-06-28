@@ -291,6 +291,14 @@ class OrderCreate(BaseModel):
         None, description="Trail amount for trailing stops"
     )
 
+    # Idempotency (ADR 0003): a stable client-supplied key. When set, the Hub
+    # returns the existing order for a repeated key instead of creating a
+    # duplicate paper trade, so re-running a backtrader export is safe. Optional
+    # and unused by normal REST/MCP order creation.
+    client_intent_id: str | None = Field(
+        None, description="Stable idempotency key; repeats return the existing order"
+    )
+
     @field_validator("stop_price")
     @classmethod
     def validate_stop_price_requirement(

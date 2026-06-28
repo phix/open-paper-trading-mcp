@@ -68,6 +68,7 @@ def test_submits_each_intent_once(tmp_path):
         "quantity": 1,
         "price": None,
         "condition": "market",
+        "client_intent_id": "a",
     }
 
 
@@ -110,7 +111,10 @@ def test_failed_submit_not_recorded_so_it_retries(tmp_path):
     # Hub rejects with 400 -> not added to ledger.
     client_fail = RecordingClient(400)
     r1 = submit_intents(
-        intents, client=client_fail, ledger=DedupeLedger(ledger_path), hub_url="http://h"
+        intents,
+        client=client_fail,
+        ledger=DedupeLedger(ledger_path),
+        hub_url="http://h",
     )
     assert not r1.ok
     assert r1.failed and r1.failed[0][0] == "a"
