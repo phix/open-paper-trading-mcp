@@ -39,7 +39,10 @@ dependencies = [
     "httpx",
     "aiohttp",
     # Database (minimal)
-    "sqlalchemy",
+    # asyncio extra pulls greenlet unconditionally; plain "sqlalchemy" gates it
+    # behind a platform_machine marker that omits macOS arm64, so async DB code
+    # broke on Apple Silicon local venvs (worked in Docker/linux-x86_64).
+    "sqlalchemy[asyncio]",
     "asyncpg",
     "aiosqlite",
     "alembic",
