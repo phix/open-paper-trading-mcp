@@ -136,6 +136,10 @@ def health_check() -> str:
 def get_account_balance(account_id: str | None = None) -> dict[str, Any]:
     """Get the current account balance and basic account information
 
+    Use this when the user asks only for the cash balance / how much money is in
+    the account. Not for holdings or P&L (use get_portfolio), and not for buying
+    power or detailed cash breakdowns (use account_details).
+
     Args:
         account_id: Optional 10-character account ID. If not provided, uses default account.
     """
@@ -189,6 +193,11 @@ def debug_context_info(ctx: Context) -> dict[str, Any]:
 def get_account_info(ctx: Context, account_id: str | None = None) -> dict[str, Any]:
     """Get comprehensive account information including balance and basic details
 
+    Use this when the user wants a general overview of the account (id, owner,
+    balance, basic metadata). Not for holdings/positions (use get_portfolio or
+    positions), and not for buying-power / cash-breakdown specifics (use
+    account_details).
+
     Args:
         account_id: Optional 10-character account ID. If not provided, uses account from context.
     """
@@ -235,6 +244,11 @@ def get_account_info(ctx: Context, account_id: str | None = None) -> dict[str, A
 @mcp.tool
 def get_portfolio(account_id: str | None = None) -> dict[str, Any]:
     """Get comprehensive portfolio information including positions and performance
+
+    Use this when the user wants the full portfolio: holdings plus values and
+    performance together. Not for a quick metrics-only snapshot (use
+    get_portfolio_summary), and not when only the raw list of stock positions is
+    wanted (use positions).
 
     Args:
         account_id: Optional 10-character account ID. If not provided, uses default account.
@@ -289,6 +303,11 @@ def get_portfolio(account_id: str | None = None) -> dict[str, Any]:
 @mcp.tool
 def get_portfolio_summary(account_id: str | None = None) -> dict[str, Any]:
     """Get portfolio summary with key performance metrics
+
+    Use this when the user wants only the headline metrics (total value, P&L,
+    etc.) without the full holdings breakdown. Not for the complete portfolio
+    with positions (use get_portfolio), and not for the raw position list (use
+    positions).
 
     Args:
         account_id: Optional 10-character account ID. If not provided, uses default account.
@@ -388,6 +407,10 @@ def get_all_accounts() -> dict[str, Any]:
 def account_details(account_id: str | None = None) -> dict[str, Any]:
     """Get comprehensive account details including buying power and cash balances
 
+    Use this when the user asks specifically about buying power or a detailed
+    cash breakdown. Not for a simple single balance figure (use
+    get_account_balance) or a general account overview (use get_account_info).
+
     Args:
         account_id: Optional 10-character account ID. If not provided, uses default account.
     """
@@ -460,6 +483,11 @@ def account_details(account_id: str | None = None) -> dict[str, Any]:
 @mcp.tool
 def positions(account_id: str | None = None) -> dict[str, Any]:
     """Get current stock positions with quantities and values
+
+    Use this when the user wants the raw list of current stock holdings (symbol,
+    quantity, value). Not for overall performance or P&L summary (use
+    get_portfolio_summary) and not for the full portfolio view (use
+    get_portfolio).
 
     Args:
         account_id: Optional 10-character account ID. If not provided, uses default account.
