@@ -252,6 +252,67 @@ ADK evaluation files use a standardized numbered prefix system aligned with user
 - **tool_trajectory_avg_score**: Measures if the agent uses the correct tools in the right sequence
 - **response_match_score**: Measures if the agent's response matches the expected output
 
+### Local-model configs (Stockade)
+
+Stockade runs the same goldens against the self-hosted local model (`tinman` /
+`qwen2.5-coder-7b-instruct`). Two local configs exist alongside the Gemini gate
+(`test_config.json`, which is **unchanged** and stays at `response_match_score: 0.2`):
+
+**1. `tests/evals/test_config.local.json` — trajectory-only (no judge key needed)**
+
+```json
+{
+  "criteria": {
+    "tool_trajectory_avg_score": 0.9,
+    "response_match_score": 0.0
+  }
+}
+```
+
+`response_match_score` (ROUGE) is set to `0.0` because ROUGE is **noise** against our
+masked-asterisk goldens — scores cluster at 0.04–0.06 regardless of answer quality, so
+it carries no signal. This config grades tool trajectory only and needs no API keys.
+
+**2. `tests/evals/test_config.local_judge.json` — trajectory + LLM-judge response quality**
+
+```json
+{
+  "criteria": {
+    "tool_trajectory_avg_score": 0.9,
+    "final_response_match_v2": {
+      "threshold": 0.5,
+      "judge_model_options": {
+        "judge_model": "gemini-2.5-flash",
+        "num_samples": 5
+      }
+    }
+  }
+}
+```
+
+`final_response_match_v2` is ADK's built-in **LLM-as-a-judge** metric for final-response
+quality (ADK ≥ 2.x). Instead of n-gram overlap, a judge model reads the user prompt, the
+agent's final response, and the (masked) golden reference and votes valid/invalid; the
+score is the fraction of valid samples across `num_samples` repeats. This gives the
+local model a *real* correctness/adequacy signal that ROUGE could not.
+
+**Configuring the judge model.** The judge is set by `judge_model_options.judge_model`
+(default `gemini-2.5-flash`). It is resolved through ADK's `LLMRegistry`, so any
+Gemini model id works out of the box. To run the judge you **must** export a Google API
+key — no secret is stored in the repo:
+
+```bash
+export GOOGLE_API_KEY="your-google-api-key"
+adk eval examples/google_adk_agent tests/evals/1_acc_*_test.json \
+  --config_file_path tests/evals/test_config.local_judge.json
+```
+
+`num_samples: 5` is ADK's recommended default for judge stability. Note the judge model
+is independent of the model under test — here the agent under test is the local
+`tinman` model (`LLM_PROVIDER=local`), while Gemini acts only as the grader. Using the
+local model itself as the judge would require registering a `LiteLlm`-backed judge in
+ADK's `LLMRegistry` and is out of scope for this config.
+
 ## Troubleshooting
 
 ### Common Issues
