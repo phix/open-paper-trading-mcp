@@ -74,6 +74,17 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "lm-studio")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen2.5-coder-7b-instruct")
 
+    # Agent run guard (phix/stockade#25)
+    # Hard cap on the number of LLM calls a single ADK agent invocation may make,
+    # passed as RunConfig(max_llm_calls=...) wherever WE run the agent under our
+    # control (see examples/google_adk_agent/runner.py). ADK's own default is 500,
+    # which let runaway tool-call loops (observed: `option_credit_spread`) burn to
+    # "Max llm calls (500) exceeded" before failing. A low cap (30) makes such
+    # loops fail fast. NOTE: the `adk eval` CLI path does NOT consume this — it
+    # builds its own Runner and calls run_async without a run_config, so it stays
+    # pinned to ADK's 500 default with no override knob.
+    AGENT_MAX_LLM_CALLS: int = int(os.getenv("AGENT_MAX_LLM_CALLS", "30"))
+
     def get_cors_origins(self) -> list[str]:
         """Convert CORS origins string to list."""
         if isinstance(self.BACKEND_CORS_ORIGINS, str):
