@@ -1,3 +1,13 @@
+# --- Frontend build stage: compile the React/Vite dashboard into frontend/dist ---
+# dist/ is .dockerignored, so it is built fresh here rather than copied from host.
+FROM node:22-slim AS frontend-builder
+WORKDIR /frontend
+# Install deps first for layer caching, then build.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 # Use an official Python runtime as a parent image
 FROM python:3.12-slim
 
@@ -30,6 +40,10 @@ COPY . .
 
 # Remove any .venv that might have been copied and recreate fresh
 RUN rm -rf .venv && uv sync --no-dev
+
+# Bring in the React dashboard built in the frontend stage (served by app/main.py
+# from /app/frontend/dist). dist/ is .dockerignored so it never comes via COPY . .
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 # Create directory for Robinhood tokens
 RUN mkdir -p /app/.tokens
