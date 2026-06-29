@@ -313,6 +313,115 @@ is independent of the model under test — here the agent under test is the loca
 local model itself as the judge would require registering a `LiteLlm`-backed judge in
 ADK's `LLMRegistry` and is out of scope for this config.
 
+## Running local-LLM evals (operational runbook)
+
+This section is the step-by-step procedure for pointing the ADK evals at the
+self-hosted local model on `tinman`. It **complements** the
+[Local-model configs](#local-model-configs-stockade) section above — see there for the
+rubric rationale and which `--config_file_path` to pass (`test_config.local.json` for
+trajectory-only, `test_config.local_judge.json` for the LLM-judge). This section covers
+only the operational setup that has actually bitten us and is documented nowhere else.
+
+### 1. Load the model with a large enough context window (the #1 trap)
+
+The ADK agent's **initial** prompt — system instruction plus the schemas for ~40 MCP
+tools — is roughly **8.2k tokens before any conversation turn happens**. If LM Studio on
+`tinman` serves the model with a small context window (e.g. the 8192 default), every
+single request fails immediately with an HTTP 400 like:
+
+```
+n_keep: 8218 >= n_ctx: 8192 ... load the model with a larger context length
+```
+
+The eval run then produces **empty results with no metrics** — it looks like a total
+capability failure, but it is pure context overflow before the model ever reasons about
+the task.
+
+**Require `n_ctx` ≥ 16k (32k per the tinman spec).** Verify the *loaded* context length
+before running — LM Studio's native `/api/v0/models` endpoint reports it, whereas the
+OpenAI-compatible `/v1/models` does not:
+
+```bash
+curl -s http://tinman.tailc095b7.ts.net:1234/api/v0/models | python3 -c "import sys,json;[print(m['id'],m.get('state'),'loaded_ctx=',m.get('loaded_context_length')) for m in json.load(sys.stdin)['data']]"
+```
+
+The model you intend to test should show `state=loaded` and `loaded_ctx` ≥ 16384.
+
+### 2. `.env` for a local run
+
+The locally-run `adk eval` agent reads `.env` from the project root. `.env` is
+**gitignored**, and it is **not** read by the Docker container — only by the agent
+process you launch from the shell. Set:
+
+```bash
+LLM_PROVIDER=local
+LLM_BASE_URL=http://tinman.tailc095b7.ts.net:1234/v1
+LLM_API_KEY=lm-studio
+LLM_MODEL=qwen2.5-coder-14b-instruct   # must match the served/loaded model id
+MCP_HTTP_URL=http://localhost:2081/mcp
+QUOTE_ADAPTER_TYPE=test
+```
+
+(If you also run the LLM-judge config, additionally `export GOOGLE_API_KEY=...` per the
+config section above — the judge is a separate Gemini call.)
+
+### 3. Toolchain install + the `uv run` gotcha
+
+`google-adk[eval]` and `litellm` are **eval-only** dependencies; they are deliberately
+not in `pyproject.toml` or the lockfile. Install them into the venv:
+
+```bash
+uv pip install "google-adk[eval]" litellm "mcp>=1.24,<2"
+```
+
+**CRITICAL: do not use `uv run` after this install.** `uv run` re-syncs the venv to the
+lock and will silently *uninstall* `google-adk`, so the next eval invocation breaks.
+Invoke the eval through the venv binary directly instead:
+
+```bash
+PYTHONPATH="$PWD" .venv/bin/adk eval examples/google_adk_agent \
+  tests/evals/1_acc_*_test.json \
+  --config_file_path tests/evals/test_config.local.json
+```
+
+When you are done evaluating, restore the venv to the locked state:
+
+```bash
+uv sync --extra dev
+```
+
+### 4. `PYTHONPATH=$PWD` is required
+
+The agent module imports `app.*`, so the project root must be on `PYTHONPATH`. Always
+prefix the eval command with `PYTHONPATH="$PWD"` (shown above). Without it the agent
+fails to import at startup.
+
+### 5. Hub must be up; rebuild the container after docstring changes
+
+The MCP tools are served by the **Docker container**, not your local working tree.
+
+```bash
+docker-compose up -d
+```
+
+A bare `GET http://localhost:2081/mcp` returning **HTTP 406** means the MCP server is
+alive (it rejects the non-MCP request). If you edit tool docstrings in
+`app/mcp_tools.py`, the model will **not** see the change until you rebuild the
+container — the local file edit alone has no effect on the served schemas:
+
+```bash
+docker-compose up -d --build
+```
+
+### 6. Run-to-run variance caveat
+
+The local model (especially the 14b) is **non-deterministic**: individual `1_acc_*`
+cases have flipped trajectory `1.0 ↔ 0.0` between identical back-to-back runs. Treat a
+single pass as a **noisy signal** — prefer multiple runs and/or a low temperature.
+Tracked in [`phix/stockade#25`](https://github.com/phix/stockade/issues/25).
+
+Also budget time: a full `1_acc_*` run is **~1.5 hours** on the 14b at 32k context.
+
 ## Troubleshooting
 
 ### Common Issues
