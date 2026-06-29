@@ -11,9 +11,14 @@ while ! pg_isready -h $DB_HOST -p $DB_PORT -U $POSTGRES_USER -d $POSTGRES_DB; do
 done
 echo "✅ Database is ready!"
 
-# Skip database migrations temporarily due to duplicate column issue
-echo "⏩ Skipping database migrations (column already exists)"
 cd /app
+
+# Initialize the database schema (idempotent; creates any missing tables).
+# Replaces the old alembic step, which was skipped due to a duplicate-column
+# migration issue and left a fresh trading_db empty (no `accounts` table), so
+# every account/portfolio/order tool failed with UndefinedTableError.
+echo "🗄️  Initializing database schema (idempotent)..."
+uv run python scripts/init_db.py
 
 # Create log directories
 mkdir -p /app/logs /tmp
