@@ -127,9 +127,11 @@ export interface StockInfoResponse {
 }
 
 export interface MarketHours {
-  is_open: boolean;
-  opens_at: string;
-  closes_at: string;
+  // All fields are optional: when the upstream data provider is unauthenticated
+  // or unreachable, the API returns an empty object rather than a real status.
+  is_open?: boolean;
+  opens_at?: string;
+  closes_at?: string;
 }
 
 export interface MarketHoursResponse {
