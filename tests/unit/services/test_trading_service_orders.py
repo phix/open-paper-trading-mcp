@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.database.trading import Account as DBAccount
 from app.models.database.trading import Order as DBOrder
+from app.models.database.trading import Position as DBPosition
 from app.schemas.orders import OrderCondition, OrderCreate, OrderStatus, OrderType
 from app.services.trading_service import TradingService
 
@@ -82,15 +83,16 @@ class TestCreateOrder:
             trail_amount=None,
         )
 
-        # Create order
+        # Create order — a market order fills synchronously at the quote price.
         result = await service.create_order(order_data)
 
         # Verify result
         assert result.symbol == "AAPL"
         assert result.order_type == OrderType.BUY
         assert result.quantity == 100
-        assert result.status == OrderStatus.PENDING
-        assert result.price is None  # Market order
+        assert result.status == OrderStatus.FILLED
+        assert result.price == 150.0  # Execution price recorded on fill
+        assert result.filled_at is not None
         assert result.id is not None
 
         # Verify order was saved to database
@@ -101,6 +103,155 @@ class TestCreateOrder:
         assert db_order is not None
         assert db_order.symbol == "AAPL"
         assert db_order.account_id == account.id
+
+        # The fill opened a position and debited cash (100 * 150 = 15,000).
+        await db_session.refresh(account)
+        assert account.cash_balance == 35000.0
+        position = (
+            await db_session.execute(
+                select(DBPosition).where(
+                    DBPosition.account_id == account.id, DBPosition.symbol == "AAPL"
+                )
+            )
+        ).scalar_one()
+        assert position.quantity == 100
+        assert position.avg_price == 150.0
+
+    @pytest.mark.asyncio
+    async def test_market_buy_averages_existing_position(
+        self, db_session: AsyncSession
+    ):
+        """A second market buy blends into a weighted-average cost basis."""
+        account = DBAccount(id="TEST123456", owner="test_user", cash_balance=50000.0)
+        db_session.add(account)
+        db_session.add(
+            DBPosition(
+                account_id="TEST123456", symbol="AAPL", quantity=100, avg_price=100.0
+            )
+        )
+        await db_session.commit()
+
+        mock_quote_adapter = AsyncMock()
+        mock_quote_adapter.get_quote.return_value = MagicMock(
+            price=200.0, quote_date=datetime.now()
+        )
+        service = TradingService(
+            quote_adapter=mock_quote_adapter,
+            account_owner="test_user",
+            db_session=db_session,
+        )
+
+        result = await service.create_order(
+            OrderCreate(
+                symbol="AAPL",
+                order_type=OrderType.BUY,
+                quantity=100,
+                condition=OrderCondition.MARKET,
+            )
+        )
+        assert result.status == OrderStatus.FILLED
+
+        position = (
+            await db_session.execute(
+                select(DBPosition).where(
+                    DBPosition.account_id == account.id, DBPosition.symbol == "AAPL"
+                )
+            )
+        ).scalar_one()
+        # (100*100 + 100*200) / 200 = 150.0
+        assert position.quantity == 200
+        assert position.avg_price == 150.0
+
+    @pytest.mark.asyncio
+    async def test_market_sell_reduces_position_and_credits_cash(
+        self, db_session: AsyncSession
+    ):
+        """A market sell reduces the position (basis unchanged) and credits cash."""
+        account = DBAccount(id="TEST123456", owner="test_user", cash_balance=1000.0)
+        db_session.add(account)
+        db_session.add(
+            DBPosition(
+                account_id="TEST123456", symbol="AAPL", quantity=100, avg_price=100.0
+            )
+        )
+        await db_session.commit()
+
+        mock_quote_adapter = AsyncMock()
+        mock_quote_adapter.get_quote.return_value = MagicMock(
+            price=150.0, quote_date=datetime.now()
+        )
+        service = TradingService(
+            quote_adapter=mock_quote_adapter,
+            account_owner="test_user",
+            db_session=db_session,
+        )
+
+        result = await service.create_order(
+            OrderCreate(
+                symbol="AAPL",
+                order_type=OrderType.SELL,
+                quantity=40,
+                condition=OrderCondition.MARKET,
+            )
+        )
+        assert result.status == OrderStatus.FILLED
+
+        await db_session.refresh(account)
+        assert account.cash_balance == 7000.0  # 1000 + 40 * 150
+        position = (
+            await db_session.execute(
+                select(DBPosition).where(
+                    DBPosition.account_id == account.id, DBPosition.symbol == "AAPL"
+                )
+            )
+        ).scalar_one()
+        assert position.quantity == 60
+        assert position.avg_price == 100.0  # Basis unchanged when reducing
+
+    @pytest.mark.asyncio
+    async def test_market_buy_rejected_on_insufficient_funds(
+        self, db_session: AsyncSession
+    ):
+        """A market buy that exceeds cash is rejected and persists no order."""
+        from app.core.exceptions import InputValidationError
+
+        account = DBAccount(id="TEST123456", owner="test_user", cash_balance=100.0)
+        db_session.add(account)
+        await db_session.commit()
+
+        mock_quote_adapter = AsyncMock()
+        mock_quote_adapter.get_quote.return_value = MagicMock(
+            price=150.0, quote_date=datetime.now()
+        )
+        service = TradingService(
+            quote_adapter=mock_quote_adapter,
+            account_owner="test_user",
+            db_session=db_session,
+        )
+
+        with pytest.raises(InputValidationError):
+            await service.create_order(
+                OrderCreate(
+                    symbol="AAPL",
+                    order_type=OrderType.BUY,
+                    quantity=10,
+                    condition=OrderCondition.MARKET,
+                )
+            )
+
+        # No order and no position should have been created.
+        orders = (
+            (
+                await db_session.execute(
+                    select(DBOrder).where(DBOrder.account_id == account.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert orders == []
+        await db_session.refresh(account)
+        assert account.cash_balance == 100.0
 
     @pytest.mark.asyncio
     async def test_create_order_idempotent_by_client_intent_id(
