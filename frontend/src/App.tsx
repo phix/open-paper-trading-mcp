@@ -1,8 +1,8 @@
 import React, { Suspense, lazy } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import { CssBaseline, ThemeProvider, CircularProgress, Box } from '@mui/material';
-import theme from './theme';
+import { CircularProgress, Box } from '@mui/material';
 import Layout from './components/Layout';
+import { ColorModeProvider } from './contexts/ColorModeContext';
 import { AccountProvider } from './contexts/AccountContext';
 import { LoadingProvider } from './contexts/LoadingContext';
 import GlobalLoadingIndicator from './components/GlobalLoadingIndicator';
@@ -72,15 +72,14 @@ const router = createBrowserRouter([
 
 const App: React.FC = () => {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ColorModeProvider>
       <LoadingProvider>
         <AccountProvider>
           <GlobalLoadingIndicator variant="topbar" showDetails={true} />
           <RouterProvider router={router} />
         </AccountProvider>
       </LoadingProvider>
-    </ThemeProvider>
+    </ColorModeProvider>
   );
 };
 
