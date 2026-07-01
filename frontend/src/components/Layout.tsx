@@ -8,10 +8,14 @@ import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SearchIcon from '@mui/icons-material/Search';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { useTheme } from '@mui/material/styles';
+import { useColorMode } from '../contexts/ColorModeContext';
 
 const Layout: React.FC = () => {
   const theme = useTheme();
+  const { mode, toggleColorMode } = useColorMode();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
@@ -37,6 +41,17 @@ const Layout: React.FC = () => {
               <MarketHours compact={true} />
             </Box>
           )}
+
+          {/* Light/dark theme toggle */}
+          <IconButton
+            color="inherit"
+            onClick={toggleColorMode}
+            aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+          </IconButton>
+
           {isMobile ? (
             <>
               <IconButton
