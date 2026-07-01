@@ -1,7 +1,7 @@
 import asyncio
 import os
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from sqlalchemy import delete, select
@@ -467,8 +467,27 @@ class TradingService:
             # If adapter fails, raise a not found error
             raise NotFoundError(f"Symbol {symbol} not found: {e!s}") from e
 
+    # Order-type groupings for fill handling.
+    _BUY_TYPES: ClassVar[set[OrderType]] = {OrderType.BUY, OrderType.BTO, OrderType.BTC}
+    _SELL_TYPES: ClassVar[set[OrderType]] = {
+        OrderType.SELL,
+        OrderType.STO,
+        OrderType.STC,
+    }
+    _TRIGGER_TYPES: ClassVar[set[OrderType]] = {
+        OrderType.STOP_LOSS,
+        OrderType.STOP_LIMIT,
+        OrderType.TRAILING_STOP,
+    }
+
     async def create_order(self, order_data: OrderCreate) -> Order:
         """Create a new trading order.
+
+        Market buy/sell orders fill **synchronously** against the current quote:
+        cash is debited/credited, the position is opened or updated at a
+        weighted-average cost basis, and the order is marked ``FILLED``. Stop and
+        other trigger orders are left ``PENDING`` for the OrderExecutionEngine to
+        monitor and fill when their condition is met.
 
         Idempotency (ADR 0003): when ``order_data.client_intent_id`` is set and
         an order with that key already exists for this account, the existing
@@ -476,8 +495,23 @@ class TradingService:
         """
         from sqlalchemy import select
 
-        # Validate symbol exists
-        await self.get_quote(order_data.symbol)
+        # Validate symbol exists and capture the price for a possible market fill.
+        quote = await self.get_quote(order_data.symbol)
+        fill_price = float(quote.price or 0.0)
+
+        is_trigger = (
+            order_data.condition in {OrderCondition.STOP, OrderCondition.STOP_LIMIT}
+            or order_data.order_type in self._TRIGGER_TYPES
+            or order_data.stop_price is not None
+        )
+        is_buy = order_data.order_type in self._BUY_TYPES
+        # A plain market buy/sell fills immediately when a live price is available.
+        fills_now = (
+            not is_trigger
+            and order_data.condition == OrderCondition.MARKET
+            and order_data.order_type in (self._BUY_TYPES | self._SELL_TYPES)
+            and fill_price > 0
+        )
 
         async def _operation(db: AsyncSession):
             account = await self._get_account()
@@ -496,23 +530,47 @@ class TradingService:
                 if existing is not None:
                     return await self.order_converter.to_schema(existing)
 
+            # Funds check before opening a long position (reject rather than
+            # persist an order that can't settle).
+            if fills_now and is_buy:
+                cost = order_data.quantity * fill_price
+                if float(account.cash_balance) < cost:
+                    raise InputValidationError(
+                        f"Insufficient funds: order costs ${cost:,.2f} but the "
+                        f"cash balance is ${float(account.cash_balance):,.2f}"
+                    )
+
             # Create database order
             db_order = DBOrder(
                 account_id=account.id,
                 symbol=order_data.symbol.upper(),
                 order_type=order_data.order_type,
                 quantity=order_data.quantity,
-                price=order_data.price,
+                # Record the execution price on a fill; keep the requested price
+                # otherwise (None for a resting market order).
+                price=fill_price if fills_now else order_data.price,
                 condition=order_data.condition,
                 stop_price=order_data.stop_price,
                 trail_percent=order_data.trail_percent,
                 trail_amount=order_data.trail_amount,
                 client_intent_id=order_data.client_intent_id,
-                status=OrderStatus.PENDING,
+                status=OrderStatus.FILLED if fills_now else OrderStatus.PENDING,
                 created_at=datetime.now(),
+                filled_at=datetime.now() if fills_now else None,
+                net_price=(order_data.quantity * fill_price) if fills_now else None,
             )
-
             db.add(db_order)
+
+            if fills_now:
+                await self._settle_fill(
+                    db,
+                    account.id,
+                    order_data.symbol.upper(),
+                    order_data.quantity,
+                    fill_price,
+                    is_buy,
+                )
+
             await db.commit()
             await db.refresh(db_order)
 
@@ -520,6 +578,70 @@ class TradingService:
             return await self.order_converter.to_schema(db_order)
 
         return await self._execute_with_session(_operation)
+
+    async def _settle_fill(
+        self,
+        db: AsyncSession,
+        account_id: str,
+        symbol: str,
+        quantity: int,
+        fill_price: float,
+        is_buy: bool,
+    ) -> None:
+        """Settle a market fill within ``db``: move cash and open/update the position.
+
+        The account is re-loaded on ``db`` (``_get_account`` returns an object from
+        a separate session, so mutating it would not persist). Position sizing uses
+        a signed quantity and weighted-average cost basis.
+        """
+        from sqlalchemy import select
+
+        account = (
+            await db.execute(select(DBAccount).where(DBAccount.id == account_id))
+        ).scalar_one()
+
+        cost = quantity * fill_price
+        account.cash_balance = float(account.cash_balance) + (-cost if is_buy else cost)
+
+        signed = quantity if is_buy else -quantity
+        position = (
+            await db.execute(
+                select(DBPosition).where(
+                    DBPosition.account_id == account_id,
+                    DBPosition.symbol == symbol,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if position is None:
+            db.add(
+                DBPosition(
+                    account_id=account_id,
+                    symbol=symbol,
+                    quantity=signed,
+                    avg_price=fill_price,
+                )
+            )
+            return
+
+        old_qty = position.quantity
+        new_qty = old_qty + signed
+        if new_qty == 0:
+            # Position fully closed.
+            await db.delete(position)
+        elif (old_qty >= 0) == (signed >= 0):
+            # Adding in the same direction → weighted-average cost basis.
+            position.avg_price = (
+                abs(old_qty) * position.avg_price + abs(signed) * fill_price
+            ) / abs(new_qty)
+            position.quantity = new_qty
+        elif (old_qty > 0) == (new_qty > 0):
+            # Reducing an existing position without crossing zero → basis unchanged.
+            position.quantity = new_qty
+        else:
+            # Crossed through zero → the remainder takes the fill price as its basis.
+            position.avg_price = fill_price
+            position.quantity = new_qty
 
     async def get_orders(self) -> list[Order]:
         """Get all orders."""
