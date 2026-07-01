@@ -86,14 +86,25 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({
         getOptionsOrders(selectedAccount.id)
       ]);
 
+      // Surface unsuccessful responses instead of silently leaving the list
+      // empty — an empty list and a failed fetch must not look identical.
+      const failures: string[] = [];
+
       if (stockResponse.success) {
         setStockOrders(stockResponse.orders.slice(0, maxItems));
+      } else {
+        setStockOrders([]);
+        failures.push(stockResponse.message || 'Failed to load stock orders');
       }
 
       if (optionsResponse.success) {
         setOptionsOrders(optionsResponse.orders.slice(0, maxItems));
+      } else {
+        setOptionsOrders([]);
+        failures.push(optionsResponse.message || 'Failed to load options orders');
       }
 
+      setError(failures.length > 0 ? failures.join(' • ') : null);
       setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load order history');

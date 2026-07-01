@@ -61,7 +61,8 @@ const MarketHoursComponent: React.FC<MarketHoursProps> = ({
     return () => clearInterval(interval);
   }, [autoRefresh, refreshInterval]);
 
-  const formatTime = (timeString: string): string => {
+  const formatTime = (timeString: string | undefined): string => {
+    if (!timeString) return '—';
     try {
       const date = new Date(timeString);
       return date.toLocaleTimeString('en-US', {
@@ -74,10 +75,15 @@ const MarketHoursComponent: React.FC<MarketHoursProps> = ({
     }
   };
 
+  // The API returns an empty object (no `is_open`) when the upstream data
+  // provider is unauthenticated/unreachable. Treat that as "Unknown" rather
+  // than misreporting it as "Closed".
+  const hasStatus = typeof marketHours?.is_open === 'boolean';
+
   const getMarketStatus = () => {
-    if (!marketHours) return { label: 'Unknown', color: 'default' as const };
-    
-    return marketHours.is_open 
+    if (!hasStatus) return { label: 'Unknown', color: 'default' as const };
+
+    return marketHours!.is_open
       ? { label: 'Open', color: 'success' as const }
       : { label: 'Closed', color: 'error' as const };
   };
@@ -148,25 +154,32 @@ const MarketHoursComponent: React.FC<MarketHoursProps> = ({
         />
       </Box>
       
-      <Box display="flex" gap={4} mb={2}>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Opens At
-          </Typography>
-          <Typography variant="body1" sx={{ fontFamily: 'Roboto Mono, monospace' }}>
-            {formatTime(marketHours.opens_at)}
-          </Typography>
+      {hasStatus ? (
+        <Box display="flex" gap={4} mb={2}>
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Opens At
+            </Typography>
+            <Typography variant="body1" sx={{ fontFamily: 'Roboto Mono, monospace' }}>
+              {formatTime(marketHours.opens_at)}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Closes At
+            </Typography>
+            <Typography variant="body1" sx={{ fontFamily: 'Roboto Mono, monospace' }}>
+              {formatTime(marketHours.closes_at)}
+            </Typography>
+          </Box>
         </Box>
-        
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Closes At
-          </Typography>
-          <Typography variant="body1" sx={{ fontFamily: 'Roboto Mono, monospace' }}>
-            {formatTime(marketHours.closes_at)}
-          </Typography>
-        </Box>
-      </Box>
+      ) : (
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Market status is unavailable — the market data provider is not
+          connected. This does not mean the market is closed.
+        </Typography>
+      )}
       
       <Box display="flex" alignItems="center" justifyContent="space-between">
         {lastUpdated && (
